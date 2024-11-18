@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000');
+// Replace 'https://online-chatroom.onrender.com' with your backend's live URL
+const socket = io('https://online-chatroom.onrender.com');
 
 const App = () => {
   const [messages, setMessages] = useState([]);
@@ -11,15 +12,21 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Fetch message history
-    fetch('http://localhost:5000/history')
-      .then(res => res.json())
-      .then(data => setMessages(data));
+    // Fetch message history from the live backend
+    fetch('https://online-chatroom.onrender.com/history')
+      .then((res) => res.json())
+      .then((data) => setMessages(data))
+      .catch((err) => console.error('Error fetching history:', err));
 
     // Listen for new messages
     socket.on('message', (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
     });
+
+    // Clean up the socket connection
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const sendMessage = () => {
@@ -31,6 +38,7 @@ const App = () => {
       fileUrl: file ? URL.createObjectURL(file) : null,
     };
 
+    // Emit the new message to the server
     socket.emit('message', newMessage);
     setMessage('');
     setFile(null);
@@ -63,8 +71,14 @@ const App = () => {
           <div>
             {messages.map((msg, index) => (
               <div key={index}>
-                <p><strong>{msg.username}</strong>: {msg.content}</p>
-                {msg.fileUrl && <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer">View File</a>}
+                <p>
+                  <strong>{msg.username}</strong>: {msg.content}
+                </p>
+                {msg.fileUrl && (
+                  <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer">
+                    View File
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -74,10 +88,7 @@ const App = () => {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type a message..."
           />
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} />
           <button onClick={sendMessage}>Send</button>
         </div>
       )}
