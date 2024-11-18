@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+<<<<<<< HEAD
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
+=======
+    "test": "echo \"Error: no test specified\" && exit 1"
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
   },
   "keywords": [],
   "author": "",
@@ -12,7 +16,10 @@
   "description": "",
   "dependencies": {
     "cors": "^2.8.5",
+<<<<<<< HEAD
     "dotenv": "^16.4.5",
+=======
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
     "express": "^4.21.1",
     "mongoose": "^8.8.1",
     "socket.io": "^4.8.1"

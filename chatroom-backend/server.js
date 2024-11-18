@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 require('dotenv').config(); // Load environment variables from .env file
+=======
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
 const express = require('express');
 const mongoose = require('mongoose');
 const { Server } = require('socket.io');
@@ -7,16 +10,22 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 
+<<<<<<< HEAD
 // Initialize the app
 const app = express();
 
 // Configure file upload storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, '/mnt/data/uploads'),  // Use Render's persistent disk path
+=======
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });
 
+<<<<<<< HEAD
 // Setup routes
 app.post('/upload', upload.single('file'), (req, res) => {
     res.json({ fileUrl: `https://<your-render-app-name>.onrender.com/uploads/${req.file.filename}` });
@@ -38,6 +47,26 @@ const dbURI = process.env.MONGO_URI;
 mongoose.connect(dbURI)
     .then(() => console.log('Connected to MongoDB Atlas'))
     .catch(err => console.log('Error connecting to MongoDB:', err));
+=======
+app.post('/upload', upload.single('file'), (req, res) => {
+    res.json({ fileUrl: `http://localhost:5000/uploads/${req.file.filename}` });
+});
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+app.use(cors());
+app.use(express.json());
+
+// MongoDB connection
+mongoose.connect('mongodb://localhost:27017/chatroom', { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.log(err));
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
 
 // Message Schema
 const MessageSchema = new mongoose.Schema({
@@ -57,6 +86,7 @@ app.get('/history', async (req, res) => {
 // Socket.io connection for real-time chat
 io.on('connection', (socket) => {
     console.log('A user connected');
+<<<<<<< HEAD
 
     // Send message history when a new user connects
     Message.find().sort({ timestamp: 1 }).then((messages) => {
@@ -70,6 +100,13 @@ io.on('connection', (socket) => {
 
         // Broadcast the message to all users
         io.emit('message', data);
+=======
+    
+    socket.on('message', async (data) => {
+        const newMessage = new Message(data);
+        await newMessage.save();
+        io.emit('message', data); // Broadcast the message
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
     });
 
     socket.on('disconnect', () => {
@@ -77,5 +114,8 @@ io.on('connection', (socket) => {
     });
 });
 
+<<<<<<< HEAD
 // Start server
+=======
+>>>>>>> 6dee10d0e12f3ae2d619d61add752a237cb8f219
 server.listen(5000, () => console.log('Server running on port 5000'));
