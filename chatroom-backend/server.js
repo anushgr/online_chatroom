@@ -38,7 +38,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 });
 
 // MongoDB connection
-const dbURI = process.env.MONGO_URI;
+const dbURI = "mongodb+srv://ccreator02:anushgr@5321@mycluster.jddlw.mongodb.net/?retryWrites=true&w=majority&appName=mycluster";
 mongoose.connect(dbURI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('Error connecting to MongoDB:', err));
