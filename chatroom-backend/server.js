@@ -5,6 +5,8 @@ const { Server } = require('socket.io');
 const http = require('http');
 const cors = require('cors');
 const multer = require('multer');
+const { GridFsStorage } = require('multer-gridfs-storage');
+const { GridFSBucket } = require('mongodb');
 const path = require('path');
 
 // Initialize the app
@@ -12,62 +14,51 @@ const app = express();
 
 console.log('MongoDB URI:', process.env.MONGODB_URI);
 console.log('Backend URL:', process.env.BACKEND_URL);
-console.log('Frontend URL:', process.env.FRONTEND_URL);
 
-// Comprehensive CORS configuration
+// CORS configuration
 const corsOptions = {
     origin: [
-        'https://online-chatroom-hod6-81dkhd2op-anushgrs-projects.vercel.app',
-        'https://online-chatroom-hod6-5amomfvhk-anushgrs-projects.vercel.app',
         'https://online-chatroom-hod6.vercel.app',
         'http://localhost:3000', // Local development
-        '*' // Use cautiously in production
     ],
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: true,
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable preflight requests for all routes
+app.options('*', cors(corsOptions));
 
 // Middleware configuration
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configure file upload storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads'),
-    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-});
-const upload = multer({ 
-    storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB file size limit
-});
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// File upload route
-app.post('/upload', upload.single('file'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-    }
-    const fileUrl = `${process.env.BACKEND_URL}/uploads/${req.file.filename}`;
-    res.json({ fileUrl });
-});
-
-// MongoDB connection with enhanced error handling
+// MongoDB connection and GridFS setup
+let gfs;
 const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('Connected to MongoDB successfully');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  }
+    try {
+        const connection = await mongoose.connect(process.env.MONGODB_URI);
+        console.log('Connected to MongoDB successfully');
+
+        const db = connection.connection.db;
+        gfs = new GridFSBucket(db, { bucketName: 'uploads' });
+    } catch (error) {
+        console.error('MongoDB connection error:', error);
+        process.exit(1);
+    }
 };
+
+// GridFS storage for multer
+const storage = new GridFsStorage({
+    url: process.env.MONGODB_URI,
+    file: (req, file) => ({
+        filename: `${Date.now()}-${file.originalname}`,
+        bucketName: 'uploads',
+    }),
+});
+
+const upload = multer({ storage });
 
 // Message Schema and Model
 const MessageSchema = new mongoose.Schema({
@@ -78,7 +69,32 @@ const MessageSchema = new mongoose.Schema({
 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// Fetch message history route with error handling
+// File upload route
+app.post('/upload', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileUrl = `${process.env.BACKEND_URL}/file/${req.file.id}`;
+    res.json({ fileUrl });
+});
+
+// Serve files from MongoDB
+app.get('/file/:id', async (req, res) => {
+    try {
+        const fileId = new mongoose.Types.ObjectId(req.params.id);
+
+        gfs.openDownloadStream(fileId).pipe(res).on('error', (err) => {
+            console.error('Error streaming file:', err);
+            res.status(500).json({ error: 'Failed to retrieve file' });
+        });
+    } catch (error) {
+        console.error('Error retrieving file:', error);
+        res.status(500).json({ error: 'Invalid file ID' });
+    }
+});
+
+// Fetch message history route
 app.get('/history', async (req, res) => {
     try {
         const messages = await Message.find().sort({ timestamp: 1 }).limit(100);
@@ -93,45 +109,38 @@ app.get('/history', async (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: corsOptions,
-    pingTimeout: 60000, // Increased timeout
+    pingTimeout: 60000,
 });
 
-// Socket.IO events with enhanced error handling
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
-    // Send message history to the newly connected user
     Message.find().sort({ timestamp: 1 }).limit(100)
         .then((messages) => {
             socket.emit('message-history', messages);
         })
-        .catch((error) => {
-            console.error('Error fetching message history:', error);
-        });
+        .catch((error) => console.error('Error fetching message history:', error));
 
-    // Handle incoming messages
     socket.on('message', async (data) => {
         try {
-            // Validate message data
             if (!data.username || (!data.content && !data.fileUrl)) {
                 return console.error('Invalid message data');
             }
 
             const newMessage = new Message(data);
             await newMessage.save();
-            io.emit('message', newMessage); // Broadcast to all users
+            io.emit('message', newMessage);
         } catch (error) {
             console.error('Error saving message:', error);
         }
     });
 
-    // Handle user disconnect
     socket.on('disconnect', () => {
         console.log('A user disconnected:', socket.id);
     });
 });
 
-// Connect to DB and start server
+// Connect to MongoDB and start server
 const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     await connectDB();
@@ -141,14 +150,3 @@ const startServer = async () => {
 };
 
 startServer();
-
-// Error handling for unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Error handling for uncaught exceptions
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    process.exit(1);
-});
