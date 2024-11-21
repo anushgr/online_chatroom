@@ -1,93 +1,112 @@
+require('dotenv').config();
 const express = require('express');
-const socketIo = require('socket.io');
 const mongoose = require('mongoose');
+const { Server } = require('socket.io');
+const http = require('http');
+const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const cors = require('cors');
-const dotenv = require('dotenv');
 const fs = require('fs');
 
-dotenv.config();
-
+// Initialize the app
 const app = express();
-const port = process.env.PORT || 5000;
 
-app.use(cors()); // Enable CORS for the frontend to communicate with the backend
-app.use(express.json()); // To parse JSON requests
-app.use(express.static('uploads')); // Serve uploaded files
+// MongoDB connection URI
+console.log('MongoDB URI:', process.env.MONGODB_URI);
 
-// Set up MongoDB connection
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log('Connected to MongoDB'))
-    .catch((err) => console.error('Failed to connect to MongoDB:', err));
+// Comprehensive CORS configuration
+const corsOptions = {
+    origin: '*', // Allow all origins for testing (can be restricted later)
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false // Set to true if you handle cookies
+};
 
-// File upload setup using Multer
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Save files with timestamp to avoid name collisions
-    },
+// Apply CORS middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight requests for all routes
+
+// Middleware configuration
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// MongoDB connection with enhanced error handling
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
+};
+
+// File upload storage configuration
+const storage = multer.memoryStorage(); // Store files in memory temporarily
+const upload = multer({ 
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
-const upload = multer({ storage: storage });
 
-// MongoDB schema for messages
-const messageSchema = new mongoose.Schema({
-    username: String,
-    content: String,
-    fileUrl: String,
+// Serve uploaded files statically from 'uploads' folder
+const uploadDirectory = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDirectory)) {
+    fs.mkdirSync(uploadDirectory);
+}
+app.use('/uploads', express.static(uploadDirectory));
+
+// MongoDB Schema and Model for messages
+const MessageSchema = new mongoose.Schema({
+    username: { type: String, required: true },
+    content: { type: String },
+    fileUrl: { type: String },
     timestamp: { type: Date, default: Date.now },
 });
+const Message = mongoose.model('Message', MessageSchema);
 
-const Message = mongoose.model('Message', messageSchema);
+// File upload route
+app.post('/upload', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
 
-// Serve message history (for new users)
+    const fileName = `${Date.now()}-${req.file.originalname}`;
+    const filePath = path.join(uploadDirectory, fileName);
+
+    // Save file to disk
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    // Store the file URL in MongoDB
+    const fileUrl = `${process.env.BACKEND_URL}/uploads/${fileName}`;
+    res.json({ fileUrl });
+});
+
+// Fetch message history route
 app.get('/history', async (req, res) => {
     try {
-        const messages = await Message.find().sort({ timestamp: 1 }).limit(100); // Get the last 100 messages
+        const messages = await Message.find().sort({ timestamp: 1 }).limit(100);
         res.json(messages);
-    } catch (err) {
-        res.status(500).json({ message: 'Error fetching history', error: err });
-    }
-});
-
-// File upload endpoint
-app.post('/upload', upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
-        }
-
-        // Save file info to MongoDB
-        const newFile = new Message({
-            username: req.body.username,  // You may use a username or session info here
-            fileUrl: `/uploads/${req.file.filename}`,
-        });
-        await newFile.save();
-
-        res.json({ fileUrl: `/uploads/${req.file.filename}` });
     } catch (error) {
-        console.error('File upload error:', error);
-        res.status(500).json({ message: 'Error uploading file', error });
+        console.error('Failed to fetch message history:', error);
+        res.status(500).json({ error: 'Failed to fetch message history' });
     }
 });
 
-// Create HTTP server and integrate with Socket.io
-const server = app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+// Create HTTP and WebSocket servers
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: corsOptions,
+    pingTimeout: 60000, // Increased timeout
 });
 
-const io = socketIo(server);
-
-// Socket.IO events
+// Socket.IO events with enhanced error handling
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     // Send message history to the newly connected user
     Message.find().sort({ timestamp: 1 }).limit(100)
         .then((messages) => {
-            socket.emit('message-history', messages);  // Send history to the new user
+            socket.emit('message-history', messages);
         })
         .catch((error) => {
             console.error('Error fetching message history:', error);
@@ -96,13 +115,14 @@ io.on('connection', (socket) => {
     // Handle incoming messages
     socket.on('message', async (data) => {
         try {
+            // Validate message data
             if (!data.username || (!data.content && !data.fileUrl)) {
                 return console.error('Invalid message data');
             }
 
             const newMessage = new Message(data);
             await newMessage.save();
-            io.emit('message', newMessage); // Broadcast the new message to all users
+            io.emit('message', newMessage); // Broadcast to all users
         } catch (error) {
             console.error('Error saving message:', error);
         }
@@ -112,4 +132,26 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('A user disconnected:', socket.id);
     });
+});
+
+// Connect to DB and start server
+const PORT = process.env.PORT || 5000;
+const startServer = async () => {
+    await connectDB();
+    server.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+};
+
+startServer();
+
+// Error handling for unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Error handling for uncaught exceptions
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    process.exit(1);
 });
