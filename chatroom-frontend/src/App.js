@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
-const socket = io('https://online-chatroom.onrender.com', {
+// Replace with your backend URL
+const backendURL = 'https://online-chatroom.onrender.com';
+const socket = io(backendURL, {
   withCredentials: true,
   transports: ['websocket', 'polling']
 });
@@ -15,20 +17,15 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Fetch message history from the backend
-    fetch('https://online-chatroom.onrender.com/history', {
-      credentials: 'include'
-    })
+    fetch(`${backendURL}/history`, { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => setMessages(data))
       .catch((err) => console.error('Error fetching history:', err));
 
-    // Listen for new messages
     socket.on('message', (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
     });
 
-    // Clean up the socket connection
     return () => {
       socket.disconnect();
     };
@@ -37,16 +34,15 @@ const App = () => {
   const sendMessage = async () => {
     if (!message && !file) return;
 
-    // If file exists, upload it first
     let fileUrl = null;
     if (file) {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       try {
-        const response = await fetch('https://online-chatroom.onrender.com/upload', {
+        const response = await fetch(`${backendURL}/upload`, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
         const data = await response.json();
         fileUrl = data.fileUrl;
@@ -59,7 +55,7 @@ const App = () => {
     const newMessage = {
       username,
       content: message,
-      fileUrl: fileUrl
+      fileUrl,
     };
 
     socket.emit('message', newMessage);
