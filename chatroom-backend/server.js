@@ -19,6 +19,7 @@ const corsOptions = {
     origin: [
         'https://online-chatroom-hod6-81dkhd2op-anushgrs-projects.vercel.app',
         'https://online-chatroom-hod6-5amomfvhk-anushgrs-projects.vercel.app',
+        'https://online-chatroom-hod6.vercel.app',
         'http://localhost:3000', // Local development
         '*' // Use cautiously in production
     ],
