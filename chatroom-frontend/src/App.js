@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
-// Replace with your backend URL
-const backendURL = 'https://online-chatroom.onrender.com';
-const socket = io(backendURL, {
+const socket = io('https://online-chatroom.onrender.com', {
   withCredentials: true,
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
 });
 
 const App = () => {
@@ -17,15 +15,20 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    fetch(`${backendURL}/history`, { credentials: 'include' })
+    // Fetch message history from the backend
+    fetch('https://online-chatroom.onrender.com/history', {
+      credentials: 'include',
+    })
       .then((res) => res.json())
       .then((data) => setMessages(data))
       .catch((err) => console.error('Error fetching history:', err));
 
+    // Listen for new messages
     socket.on('message', (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
     });
 
+    // Clean up the socket connection
     return () => {
       socket.disconnect();
     };
@@ -35,12 +38,13 @@ const App = () => {
     if (!message && !file) return;
 
     let fileUrl = null;
+    // If file exists, upload it first
     if (file) {
       const formData = new FormData();
       formData.append('file', file);
 
       try {
-        const response = await fetch(`${backendURL}/upload`, {
+        const response = await fetch('https://online-chatroom.onrender.com/upload', {
           method: 'POST',
           body: formData,
         });
@@ -55,7 +59,7 @@ const App = () => {
     const newMessage = {
       username,
       content: message,
-      fileUrl,
+      fileUrl: fileUrl,
     };
 
     socket.emit('message', newMessage);
@@ -94,10 +98,10 @@ const App = () => {
                   <strong>{msg.username}</strong>: {msg.content}
                 </p>
                 {msg.fileUrl && (
-                  <a 
-                    href={msg.fileUrl} 
-                    download 
-                    target="_blank" 
+                  <a
+                    href={msg.fileUrl}
+                    download
+                    target="_blank"
                     rel="noopener noreferrer"
                   >
                     Download File
