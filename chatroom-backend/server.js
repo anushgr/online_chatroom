@@ -10,6 +10,10 @@ const path = require('path');
 // Initialize the app
 const app = express();
 
+console.log('MongoDB URI:', process.env.MONGODB_URI);
+console.log('Backend URL:', process.env.BACKEND_URL);
+console.log('Frontend URL:', process.env.FRONTEND_URL);
+
 // Comprehensive CORS configuration
 const corsOptions = {
     origin: [
@@ -55,16 +59,13 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
 // MongoDB connection with enhanced error handling
 const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
-        console.log('Connected to MongoDB successfully');
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
-        process.exit(1);
-    }
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
 };
 
 // Message Schema and Model
