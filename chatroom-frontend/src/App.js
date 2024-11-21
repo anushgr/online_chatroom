@@ -15,7 +15,7 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Fetch message history from the backend
+    // Fetch message history from the backend when component mounts
     fetch('https://online-chatroom.onrender.com/history', {
       credentials: 'include',
     })
@@ -23,12 +23,17 @@ const App = () => {
       .then((data) => setMessages(data))
       .catch((err) => console.error('Error fetching history:', err));
 
-    // Listen for new messages
+    // Listen for new messages from other users
     socket.on('message', (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
     });
 
-    // Clean up the socket connection
+    // Listen for the initial message history sent on connection
+    socket.on('message-history', (history) => {
+      setMessages(history);  // Display the full message history
+    });
+
+    // Clean up the socket connection on unmount
     return () => {
       socket.disconnect();
     };
@@ -98,14 +103,16 @@ const App = () => {
                   <strong>{msg.username}</strong>: {msg.content}
                 </p>
                 {msg.fileUrl && (
-                  <a
-                    href={msg.fileUrl}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Download File
-                  </a>
+                  <div>
+                    <a
+                      href={msg.fileUrl}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {msg.fileUrl.split('/').pop()}  {/* Display file name */}
+                    </a>
+                  </div>
                 )}
               </div>
             ))}
