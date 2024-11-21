@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
-// Replace 'https://online-chatroom.onrender.com' with your backend's live URL
-const socket = io('https://online-chatroom.onrender.com');
+const socket = io('https://online-chatroom.onrender.com', {
+  withCredentials: true,
+  transports: ['websocket', 'polling']
+});
 
 const App = () => {
   const [messages, setMessages] = useState([]);
@@ -12,8 +14,10 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Fetch message history from the live backend
-    fetch('https://online-chatroom.onrender.com/history')
+    // Fetch message history from the backend
+    fetch('https://online-chatroom.onrender.com/history', {
+      credentials: 'include'
+    })
       .then((res) => res.json())
       .then((data) => setMessages(data))
       .catch((err) => console.error('Error fetching history:', err));
@@ -29,16 +33,34 @@ const App = () => {
     };
   }, []);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!message && !file) return;
+
+    // If file exists, upload it first
+    let fileUrl = null;
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const response = await fetch('https://online-chatroom.onrender.com/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+        fileUrl = data.fileUrl;
+      } catch (error) {
+        console.error('File upload error:', error);
+        return;
+      }
+    }
 
     const newMessage = {
       username,
       content: message,
-      fileUrl: file ? URL.createObjectURL(file) : null,
+      fileUrl: fileUrl
     };
 
-    // Emit the new message to the server
     socket.emit('message', newMessage);
     setMessage('');
     setFile(null);
@@ -75,8 +97,13 @@ const App = () => {
                   <strong>{msg.username}</strong>: {msg.content}
                 </p>
                 {msg.fileUrl && (
-                  <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer">
-                    View File
+                  <a 
+                    href={msg.fileUrl} 
+                    download 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    Download File
                   </a>
                 )}
               </div>
