@@ -14,7 +14,6 @@ const port = process.env.PORT || 5000;
 
 app.use(cors({
     origin: 'https://online-chatroom-hod6.vercel.app',
-    '*',
     credentials: true, // Allow cookies and credentials
 })); // Enable CORS for the frontend to communicate with the backend
 app.use(express.json()); // To parse JSON requests
